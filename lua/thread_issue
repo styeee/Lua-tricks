@@ -1,0 +1,62 @@
+#define _CRT_SECURE_NO_WARNINGS 1
+
+#include <iostream>
+#include <thread>
+#include <functional>
+using namespace std;
+#include <windows.h>
+
+#pragma comment(lib,"lua51")
+#pragma comment(lib,"luajit")
+#pragma comment(lib,"minilua")
+
+#include "lua/lua.hpp"
+#include "lua/lua_inter.h"
+
+int value=0;
+int f=LUA_NOREF;
+
+int main(int argc,char**argv)
+{
+	lua_State*lua=lua_open();
+	luaL_openlibs(lua);
+
+#define text ("a=0 save(function() a=a+1 return a end) c=run() out()")
+	lua_register(lua,"test",[](lua_State*l)
+	{
+		cout<<text<<endl;
+		luaL_dostring(l,text);
+		return 0;
+	});
+	lua_register(lua,"out",[](lua_State*l)
+		{cout<<value<<endl;return 0;});
+	lua_register(lua,"save",[](lua_State*l)
+		{f=luaL_ref(l,LUA_REGISTRYINDEX);return 0;});
+	lua_register(lua,"run",[](lua_State*l)
+	{
+		lua_State*n=lua_newthread(l);
+		
+		thread([](lua_State*n)
+		{
+			while(true)
+			{
+				lua_rawgeti(n,LUA_REGISTRYINDEX,f);
+				if(lua_pcall(n,0,1,0))
+					cout<<lua_tostring(n,-1)<<endl;
+				else
+					value=lua_tointeger(n,-1);
+				lua_pop(n,1);
+			}
+		}
+		,n).detach();
+
+		return 1;
+	});
+
+	cout<<"[ Use test() and out()! ]"<<endl;
+	
+	inter(argc,argv,lua);
+	lua_close(lua);
+
+	return 0;
+}
